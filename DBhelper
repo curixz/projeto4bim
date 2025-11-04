@@ -1,0 +1,56 @@
+package com.example.myapplication
+
+import android.content.ContentValues
+import android.content.Context
+import android.database.Cursor
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteOpenHelper
+
+class DBHelper(context: Context) : SQLiteOpenHelper(context, "AppDB", null, 1) {
+
+    private val tableName = "task"
+
+    override fun onCreate(db: SQLiteDatabase) {
+        val sql = "CREATE TABLE $tableName (id INTEGER PRIMARY KEY AUTOINCREMENT ,title TEXT NOT NULL, category TEXT, due_at INTEGER, done INTEGER DEFAULT 0)"
+        db.execSQL(sql)
+    }
+
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        db.execSQL("DROP TABLE IF EXISTS $tableName")
+        onCreate(db)
+    }
+
+    fun inserirTarefa(title: String, category: String?, dueAt: Long?, done: Int = 0): Boolean {
+        val db = writableDatabase
+        val valores = ContentValues().apply {
+            put("title", title)
+            put("category", category)
+            put("due_at", dueAt)
+            put("done", done)
+        }
+        val resultado = db.insert(tableName, null, valores)
+        return resultado != -1L
+    }
+
+    fun listarTarefas(): Cursor {
+        val db = readableDatabase
+        return db.rawQuery("SELECT * FROM $tableName", null)
+    }
+
+    fun deletarTarefa(id: Int): Boolean {
+        val db = writableDatabase
+        val resultado = db.delete(tableName, "id = ?", arrayOf(id.toString()))
+        return resultado > 0
+    }
+
+    fun atualizarStatus(id: Int, done: Int): Boolean {
+        val db = writableDatabase
+        val valores = ContentValues().apply {
+            put("done", done)
+        }
+        val resultado = db.update(tableName, valores, "id = ?", arrayOf(id.toString()))
+        return resultado > 0
+    }
+
+
+}
