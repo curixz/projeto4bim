@@ -1,0 +1,321 @@
+package com.example.myapplication
+
+import android.app.DatePickerDialog
+import android.database.Cursor
+import android.os.Bundle
+import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.myapplication.ui.theme.MyApplicationTheme
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlin.math.max
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        val db = DBHelper(this)
+
+        setContent {
+            MyApplicationTheme {
+                // fundo gradiente halloween (roxo -> preto)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(Color(0xFF1E0036), Color(0xFF0A0A0A))
+                            )
+                        )
+                ) {
+                    AppScreen(db)
+                }
+            }
+        }
+    }
+}
+
+data class Tarefa(
+    val id: Int,
+    val title: String,
+    val category: String?,
+    val dueAt: Long?,
+    val done: Int
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppScreen(db: DBHelper) {
+    val context = LocalContext.current
+    var title by remember { mutableStateOf(TextFieldValue("")) }
+    var category by remember { mutableStateOf(TextFieldValue("")) }
+    var dueDate by remember { mutableStateOf<Long?>(null) }
+    var tarefas by remember { mutableStateOf(carregarTarefas(db)) }
+
+    // calcula proximo halloween
+    val halloweenDate = remember {
+        Calendar.getInstance().apply {
+            val nowYear = get(Calendar.YEAR)
+            set(Calendar.YEAR, nowYear)
+            set(Calendar.MONTH, Calendar.OCTOBER)
+            set(Calendar.DAY_OF_MONTH, 31)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+        }.timeInMillis
+    }.let {
+        if (it < System.currentTimeMillis()) {
+            Calendar.getInstance().apply {
+                val nextYear = get(Calendar.YEAR) + 1
+                set(Calendar.YEAR, nextYear)
+                set(Calendar.MONTH, Calendar.OCTOBER)
+                set(Calendar.DAY_OF_MONTH, 31)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+            }.timeInMillis
+        } else it
+    }
+
+    val now = System.currentTimeMillis()
+    val millisRestantes = max(0, halloweenDate - now)
+    val diasRestantes = (millisRestantes / (1000 * 60 * 60 * 24)).toInt()
+    val horasRestantes =
+        ((millisRestantes % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)).toInt()
+
+    Scaffold(
+        // usa container escuro para nao “sumir” com os textos
+        containerColor = Color.Transparent,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "🎃 haunted to-do",
+                        color = Color(0xFFFFA500),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0x66000000),
+                    titleContentColor = Color(0xFFFFA500),
+                    navigationIconContentColor = Color.White,
+                    actionIconContentColor = Color.White
+                )
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .padding(16.dp)
+                .fillMaxSize(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                "faltam $diasRestantes dias e $horasRestantes horas para o halloween!",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFFFFA500)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // ===== campo titulo (texto branco visivel) =====
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("titulo da tarefa") },
+                placeholder = { Text("ex.: comprar fantasias", color = Color(0x80FFFFFF)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = TextStyle(fontSize = 16.sp),
+                colors = textFieldHalloweenColors()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // ===== campo categoria (texto branco visivel) =====
+            OutlinedTextField(
+                value = category,
+                onValueChange = { category = it },
+                label = { Text("categoria (opcional)") },
+                placeholder = { Text("ex.: compras, estudos...", color = Color(0x80FFFFFF)) },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                textStyle = TextStyle(fontSize = 16.sp),
+                colors = textFieldHalloweenColors()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val dateFormatter = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+            val dataTexto = dueDate?.let { dateFormatter.format(Date(it)) } ?: "selecionar data"
+
+            Button(
+                onClick = {
+                    val cal = Calendar.getInstance()
+                    DatePickerDialog(
+                        context,
+                        { _, year, month, day ->
+                            cal.set(year, month, day, 0, 0, 0)
+                            dueDate = cal.timeInMillis
+                        },
+                        cal.get(Calendar.YEAR),
+                        cal.get(Calendar.MONTH),
+                        cal.get(Calendar.DAY_OF_MONTH)
+                    ).show()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A0DAD)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(dataTexto, color = Color.White)
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = {
+                    val t = title.text.trim()
+                    if (t.isNotEmpty()) {
+                        db.inserirTarefa(t, category.text.ifEmpty { null }, dueDate, 0)
+                        title = TextFieldValue("")
+                        category = TextFieldValue("")
+                        dueDate = null
+                        tarefas = carregarTarefas(db)
+                        Toast.makeText(context, "tarefa adicionada!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "digite um titulo", Toast.LENGTH_SHORT).show()
+                    }
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA500)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("adicionar tarefa", color = Color.Black)
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                "suas tarefas",
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFFFFA500)
+            )
+
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp)
+            ) {
+                items(tarefas) { tarefa ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xB3000000)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                tarefa.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                color = Color.White
+                            )
+                            tarefa.category?.let {
+                                Text(
+                                    "categoria: $it",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFCCCCCC)
+                                )
+                            }
+                            tarefa.dueAt?.let {
+                                Text(
+                                    "prazo: ${dateFormatter.format(Date(it))}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color(0xFFCCCCCC)
+                                )
+                            }
+                            Spacer(Modifier.height(8.dp))
+
+                            if (tarefa.done == 0) {
+                                Button(
+                                    onClick = {
+                                        db.atualizarStatus(tarefa.id, 1)
+                                        tarefas = carregarTarefas(db)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A0DAD)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("marcar como concluida ✅", color = Color.White)
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        db.deletarTarefa(tarefa.id)
+                                        tarefas = carregarTarefas(db)
+                                        Toast.makeText(context, "tarefa removida!", Toast.LENGTH_SHORT).show()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3B30)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("excluir tarefa ❌", color = Color.White)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ===== paleta do textfield com texto branco visivel =====
+// se sua versao do compose for mais nova e tiver focusedTextColor/unfocusedTextColor,
+// pode trocar abaixo por esses nomes. este bloco cobre as versões comuns.
+@Composable
+private fun textFieldHalloweenColors() = TextFieldDefaults.colors(
+    focusedContainerColor = Color.Transparent,
+    unfocusedContainerColor = Color.Transparent,
+    focusedIndicatorColor = Color(0xFFFFA500),
+    unfocusedIndicatorColor = Color.White,
+    cursorColor = Color(0xFFFFA500),
+    focusedLabelColor = Color(0xFFFFA500),
+    unfocusedLabelColor = Color.White,
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color.White,
+    focusedPlaceholderColor = Color(0x80FFFFFF),
+    unfocusedPlaceholderColor = Color(0x80FFFFFF)
+)
+
+
+// --- Função auxiliar ---
+fun carregarTarefas(db: DBHelper): List<Tarefa> {
+    val lista = mutableListOf<Tarefa>()
+    val cursor: Cursor = db.listarTarefas()
+    while (cursor.moveToNext()) {
+        val id = cursor.getInt(cursor.getColumnIndexOrThrow("id"))
+        val title = cursor.getString(cursor.getColumnIndexOrThrow("title"))
+        val category = cursor.getString(cursor.getColumnIndexOrThrow("category"))
+        // se sua coluna puder ser nula, trate aqui (ex.: use getLong e cheque 0L)
+        val dueAt = cursor.getLong(cursor.getColumnIndexOrThrow("due_at"))
+        val dueAtNullable = if (dueAt == 0L) null else dueAt
+        val done = cursor.getInt(cursor.getColumnIndexOrThrow("done"))
+        lista.add(Tarefa(id, title, category, dueAtNullable, done))
+    }
+    cursor.close()
+    return lista
+}
